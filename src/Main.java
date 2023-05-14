@@ -2,143 +2,188 @@ import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
+import javax.security.auth.DestroyFailedException;
 import java.io.*;
+import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.security.InvalidKeyException;
-import java.security.NoSuchAlgorithmException;
+import java.security.*;
+import java.security.cert.CertificateEncodingException;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.security.spec.InvalidKeySpecException;
-import java.util.Arrays;
-import java.util.Scanner;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.*;
 
 public class Main {
     public static Scanner scanner = new Scanner(System.in);
 
-    public static void main(String[] args) throws NoSuchPaddingException, IllegalBlockSizeException, IOException, NoSuchAlgorithmException, InvalidKeySpecException, BadPaddingException, InvalidKeyException {
-        Main.xifrarYDesxifrarAmbClauAleatoria();
-        Main.xifrarYDesxifrarAmbClauGeneradaAPartirDeUnaParaula("pas");
-        Main.xifrarYDesxifrarAmbClauGeneradaAPartirDeUnaParaulaBadPadding();
-        Main.trobarContrasena();
+    public static void main(String[] args) throws Exception {
+
+        Main.decryptRandom();
+        Main.addKeyToKeyStore();
+        Main.laodKeyStore();
+        Main.devolverPublicKeyAPartirDeUnCert();
+        Main.devolverPublicKeyAPartirDeUnPrivateKey();
+        Main.devolverSignatura();
+        Main.comprovarInfo();
+        Main.xifrarYDescifrarAmbClauEmbolcallada();
 
     }
 
-    public static void xifrarYDesxifrarAmbClauAleatoria(){
-        try {
 
-            System.out.println("EX1.5--------------------------------------------------------");
-            // Generem una clau aleatòria de 256 bits
-            SecretKey key = UtilitatsXifrar.keygenKeyGeneration(256);
-            System.out.println("Escribe el texto a encriptar");
-            // Text en clar que volem xifrar
-            String textAEncriptar = scanner.nextLine();
 
-            // Convertim el text en clar a un array de bytes
-            byte[] textAEncriptarBytes = textAEncriptar.getBytes();
+    public static void decryptRandom() throws NoSuchPaddingException, IllegalBlockSizeException, NoSuchAlgorithmException, BadPaddingException, InvalidKeyException {
+        System.out.println("Ex 1");
+        //Generamos un par de claves de 1024 bits
+        KeyPair keyPair= UtilitatsXifrar.randomGenerate(1024);
+        System.out.println("Escribe el texto a encriptar");
+        // Le pedimos al usuario que escriba el texto a encriptar
+        String textAEncriptar = scanner.nextLine();
 
-            // Xifrem el text amb la clau generada
-            byte[] textXifratBytes = UtilitatsXifrar.encryptData(textAEncriptarBytes, key);
+        // Encriptamos el texto con la clave publica del keypair
+        byte[] textAEncriptarBytes = UtilitatsXifrar.encryptData(textAEncriptar.getBytes(),keyPair);
 
-            // Desxifrem el text xifrat amb la mateixa clau
-            byte[] textDesxifratBytes = UtilitatsXifrar.decryptData(textXifratBytes, key);
+        // Y desencriptamos el mensaje con la clave privada del keypair
+        byte[] textDesxifratBytes = UtilitatsXifrar.decryptData(textAEncriptarBytes, keyPair);
+        String textDesxifrat = new String(textDesxifratBytes);
+        //Lo mostramos por pantalla
+        System.out.println(textDesxifrat);
 
-            // Convertim el text desxifrat a una cadena de caràcters
-            String textDesxifrat = new String(textDesxifratBytes);
 
-            // Mostrem el text original, el text xifrat i el text desxifrat per pantalla
-            System.out.println("Text original: " + textAEncriptar);
-            System.out.println("Text xifrat: " + Arrays.toString(textXifratBytes));
-            System.out.println("Text desxifrat: " + textDesxifrat);
+    }
+    public static void laodKeyStore() throws Exception {
+        System.out.println("---------------------------------------");
+        System.out.println("Ex 2.1");
+        //Cargamos el keystore en memoria
+        KeyStore keyStore = UtilitatsXifrar.loadKeyStore("keystore_ruben.ks","ubuntu");
+        //Tipus de keystore
+        System.out.println("Tipo de keystore: " + keyStore.getType());
+        //Cantidad de claves almacenadas
+        int numKeys = keyStore.size();
+        System.out.println("Mida del magatzem (quantes claus hi ha?): " + numKeys);
 
-        } catch (Exception e) {
-            System.err.println(e);
+        //Los alias de todas las claves almacenadas
+        Enumeration<String> aliases = keyStore.aliases();
+        System.out.println("Àlies de totes les claus emmagatzemades:");
+        while (aliases.hasMoreElements()) {
+            String alias = aliases.nextElement();
+            System.out.println(alias);
+        }
+
+        // Obtener el certificado de una de las claves por su alias
+        String keyAlias = "lamevaclaum9";
+        X509Certificate cert = (X509Certificate) keyStore.getCertificate(keyAlias);
+        System.out.println("Certificat de la clau " + keyAlias + ": " + cert);
+
+        // Obtener el algoritmo de cifrado de alguna de las claves por su alias
+        String keyAlias2 = "lamevaclaum9"; // Reemplaza esto con el alias de la clave que deseas obtener
+        Key key = keyStore.getKey(keyAlias2, "ubuntu".toCharArray()); // Reemplaza esto con la contraseña de la clave
+        String algorithm = key.getAlgorithm();
+        System.out.println("Algorisme de xifrat de la clau " + keyAlias2 + ": " + algorithm);
+
+
+    }
+    public static void addKeyToKeyStore() throws Exception {
+        System.out.println("---------------------------------------");
+        System.out.println("Ex 2.2");
+        //Cargamos el keystore en memoria
+        KeyStore keyStore = UtilitatsXifrar.loadKeyStore("keystore_ruben.ks","ubuntu");
+        String keyAlias = "ruben"; // Reemplaza esto con el alias que deseas para la clave
+        char[] password = "ubuntu".toCharArray(); // Reemplaza esto con la contraseña que deseas para la clave
+        SecretKey secretKey = UtilitatsXifrar.keygenKeyGeneration(128); // Reemplaza esto con tu propio método para generar una SecretKey
+        //Creamos la nueva entrada
+        KeyStore.SecretKeyEntry keyEntry = new KeyStore.SecretKeyEntry(secretKey);
+        KeyStore.ProtectionParameter protectionParameter = new KeyStore.PasswordProtection(password);
+        keyStore.setEntry(keyAlias, keyEntry, protectionParameter);
+
+        // Guardar el keystore actualizado en un archivo
+        try (OutputStream out = new FileOutputStream("keystore_ruben.ks")) {
+            keyStore.store(out, password);
         }
     }
-    public static void xifrarYDesxifrarAmbClauGeneradaAPartirDeUnaParaula(String paraula){
+    public static void devolverPublicKeyAPartirDeUnCert() throws Exception {
+        System.out.println("---------------------------------------");
+        System.out.println("Ex 3");
+        PublicKey publicKey = UtilitatsXifrar.getPublicKey("micertificado.cer");
+        System.out.println(publicKey.toString());
+
+    }
+    public static void devolverPublicKeyAPartirDeUnPrivateKey() throws Exception {
+        System.out.println("---------------------------------------");
+        System.out.println("Ex 4");
+        KeyStore keyStore = UtilitatsXifrar.loadKeyStore("keystore_ruben.ks","ubuntu");
+        String alias = "lamevaclaum9";
+        String pwd = "ubuntu";
+        PublicKey publicKey = UtilitatsXifrar.getPublicKey(keyStore,alias,pwd);
+        System.out.println(publicKey.toString());
+
+    }
+
+    public static void comprovarInfo() throws Exception {
+        System.out.println("---------------------------------------");
+        System.out.println("Ex 6");
+        String datos = "hola me llamo ruben";
+        byte [] datosByte = datos.getBytes();
+        KeyStore keyStore = UtilitatsXifrar.loadKeyStore("keystore_ruben.ks","ubuntu");
+        String password = "ubuntu";
+        Key key = keyStore.getKey("lamevaclaum9", password.toCharArray());
+        PrivateKey privateKey = (PrivateKey) key;
+        PublicKey publicKey = UtilitatsXifrar.getPublicKey(keyStore, "lamevaclaum9", password);
+
+        byte[] signature = UtilitatsXifrar.generateSignature(datos, privateKey);
+        boolean segur = UtilitatsXifrar.verifySignature(datosByte,signature,publicKey);
+        if (segur){
+            System.out.println("La informacio es valida");
+        }
+        else {
+            System.out.println("La info no es valida");
+        }
+
+
+    }
+
+
+    public static void devolverSignatura() throws Exception {
+        System.out.println("---------------------------------------");
+        System.out.println("Ex 5");
+        KeyStore keyStore = UtilitatsXifrar.loadKeyStore("keystore_ruben.ks","ubuntu");
+        String password = "ubuntu";
+        Key key = keyStore.getKey("lamevaclaum9", password.toCharArray());
+        PrivateKey privateKey = (PrivateKey) key;
+        String data = "datos a firmar";
+        byte[] signature = UtilitatsXifrar.generateSignature(data, privateKey);
+        System.out.println(Arrays.toString(signature));
+    }
+    public static void xifrarYDescifrarAmbClauEmbolcallada(){
         try {
-            System.out.println("EX1.6--------------------------------------------------------");
-            // Generem una clau a partir d'una paraula de pas de 128 bits
-            SecretKey key = UtilitatsXifrar.passwordKeyGeneration(paraula, 128);
-            System.out.println("Escribe el texto a encriptar");
-            // Text en clar que volem xifrar
-            String textAEncriptar = scanner.nextLine();
+            System.out.println("---------------------------------------");
+            System.out.println("Ex 2 Parte 2 Clau embocallada");
+            // Generamos un par de claves RSA
+            KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
+            keyGen.initialize(2048);
+            KeyPair keyPair = keyGen.generateKeyPair();
 
-            // Convertim el text en clar a un array de bytes
-            byte[] textAEncriptarBytes = textAEncriptar.getBytes();
+            // Creamos un mensaje a cifrar
+            String mensaje = "Hola soy Ruben Modamio de 2n DAM";
 
-            // Xifrem el text amb la clau generada a partir de la paraula de pas
-            byte[] textXifratBytes = UtilitatsXifrar.encryptData(textAEncriptarBytes, key);
+            // Ciframos el mensaje con la clave pública del destinatario
+            PublicKey publicKey = keyPair.getPublic();
+            byte[][] encWrappedData = UtilitatsXifrar.encryptWrappedData(mensaje.getBytes(), publicKey);
 
-            // Desxifrem el text xifrat amb la mateixa clau generada a partir de la paraula de pas
-            byte[] textDesxifratBytes = UtilitatsXifrar.decryptData(textXifratBytes, key);
+            // Desciframos el mensaje con la clave privada del destinatario
+            PrivateKey privateKey = keyPair.getPrivate();
+            byte[] decMsg = UtilitatsXifrar.decryptWrappedData(encWrappedData, privateKey);
 
-            // Convertim el text desxifrat a una cadena de caràcters
-            String textDesxifrat = new String(textDesxifratBytes);
-
-            // Mostrem el text original, el text xifrat i el text desxifrat per pantalla
-            System.out.println("Text original: " + textAEncriptar);
-            System.out.println("Text xifrat: " + Arrays.toString(textXifratBytes));
-            System.out.println("Text desxifrat: " + textDesxifrat);
-
-            System.out.println("EX1.7--------------------------------------------------------");
-            System.out.println("Algoritmo" + key.getAlgorithm());
-            System.out.println("Codificacion" + key.getEncoded());
-
-        } catch (Exception e) {
-            e.printStackTrace();
+            // Imprimimos el mensaje original, el mensaje cifrado y el mensaje descifrado para comprovar que funciona correctamente
+            System.out.println("Mensaje original: " + mensaje);
+            System.out.println("Mensaje cifrado: " + Base64.getEncoder().encodeToString(encWrappedData[0]) + ", " + Base64.getEncoder().encodeToString(encWrappedData[1]));
+            System.out.println("Mensaje descifrado: " + new String(decMsg));
+        } catch (Exception ex) {
+            System.err.println("Ha succeït un error: " + ex);
         }
     }
-    public static void xifrarYDesxifrarAmbClauGeneradaAPartirDeUnaParaulaBadPadding(){
-        try {
-            System.out.println("EX1.8--------------------------------------------------------");
-            // Generem una clau a partir d'una paraula de pas de 128 bits
-            String paraulaDePas = "pasIncorrecto";
-            SecretKey key = UtilitatsXifrar.passwordKeyGeneration(paraulaDePas, 128);
 
-            // Text xifrat que volem desxifrar
-            byte[] textXifratBytes = {67, -19, 116, -55, 17, 89, 52, 31, -81, -65, 40, 73, 69, -41, 67, -73};
-
-            // Desxifrem el text xifrat amb una clau generada a partir d'una paraula de pas incorrecta
-            byte[] textDesxifratBytes = UtilitatsXifrar.decryptData(textXifratBytes, key);
-
-            // Convertim el text desxifrat a una cadena de caràcters
-            if (textDesxifratBytes != null){
-                String textDesxifrat = new String(textDesxifratBytes);
-
-                // Mostrem el text desxifrat per pantalla
-                System.out.println("Text desxifrat: " + textDesxifrat);
-            }
-
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    public static void trobarContrasena() throws IOException, NoSuchAlgorithmException, InvalidKeySpecException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException, InvalidKeyException {
-            // Llegim el contingut del fitxer "clausA4.txt" per obtenir una llista de possibles contrasenyes
-            System.out.println("EX2--------------------------------------------------------");
-            BufferedReader reader = new BufferedReader(new FileReader("clausA4.txt"));
-            String line = reader.readLine();
-            Path path = Paths.get("textamagat.crypt");
-//            FileInputStream fis = new FileInputStream("textamagat.crypt");
-            byte[] contingutEncriptat = Files.readAllBytes(path);
-//            fis.close();
-            while (line != null) {
-                SecretKey key = UtilitatsXifrar.passwordKeyGeneration(line, 128);
-                byte[] contingutDesxifrat = UtilitatsXifrar.decryptData(contingutEncriptat, key);
-                if (contingutDesxifrat != null) {
-                    String textDescifrat = new String(contingutDesxifrat, "UTF8");
-                    System.out.println("Fitxer descifrat");
-                    System.out.println(line);
-                    System.out.println(textDescifrat);
-                    break;
-
-                }
-                line = reader.readLine();
-            }
-            reader.close();
-
-
-    }
 }
